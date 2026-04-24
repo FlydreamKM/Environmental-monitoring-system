@@ -18,6 +18,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "st7735.h"
+#include "stm32f1xx_hal_gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -112,8 +114,8 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  ST7789_Init();
-  //ST7789_Test();
+  ST7735_Init();
+  
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -123,6 +125,26 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    ST7735_FillScreen(ST7735_RED);
+    ST7735_WriteString(3, 55, "Hello World", Font_11x18, ST7735_WHITE, ST7735_RED);
+    HAL_Delay(1000);
+
+    ST7735_FillScreen(ST7735_BLUE);
+    ST7735_WriteString(3, 55, "Hello World", Font_11x18, ST7735_YELLOW, ST7735_BLUE);
+    HAL_Delay(1000);
+
+    ST7735_FillScreen(ST7735_GREEN);
+    ST7735_WriteString(3, 55, "Hello World", Font_11x18, ST7735_BLACK, ST7735_GREEN);
+    HAL_Delay(1000);
+
+    ST7735_FillScreen(ST7735_BLACK);
+    ST7735_WriteString(3, 55, "Hello World", Font_11x18, ST7735_WHITE, ST7735_BLACK);
+    HAL_Delay(1000);
+
+    HAL_GPIO_WritePin(GPIOB,GPIO_PIN_1,GPIO_PIN_SET);
+    HAL_Delay(1000);
+    HAL_GPIO_WritePin(GPIOB,GPIO_PIN_1,GPIO_PIN_RESET);
+    HAL_Delay(1000);
   }
   /* USER CODE END 3 */
 }
@@ -306,12 +328,12 @@ static void MX_SPI1_Init(void)
   /* SPI1 parameter configuration*/
   hspi1.Instance = SPI1;
   hspi1.Init.Mode = SPI_MODE_MASTER;
-  hspi1.Init.Direction = SPI_DIRECTION_1LINE;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
   hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
