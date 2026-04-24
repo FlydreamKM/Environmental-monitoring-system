@@ -384,6 +384,18 @@ void ST7735_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint
     while(st7735_dma_busy);
 }
 
+void ST7735_PushBuffer(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t* buffer) {
+    if((x >= ST7735_WIDTH) || (y >= ST7735_HEIGHT)) return;
+    if((x + w - 1) >= ST7735_WIDTH) w = ST7735_WIDTH - x;
+    if((y + h - 1) >= ST7735_HEIGHT) h = ST7735_HEIGHT - y;
+
+    ST7735_Select();
+    ST7735_SetAddressWindow(x, y, x + w - 1, y + h - 1);
+    HAL_GPIO_WritePin(ST7735_DC_GPIO_Port, ST7735_DC_Pin, GPIO_PIN_SET);
+    HAL_SPI_Transmit(&ST7735_SPI_PORT, (uint8_t*)buffer, w * h * 2, HAL_MAX_DELAY);
+    ST7735_Unselect();
+}
+
 void ST7735_InvertColors(bool invert) {
     ST7735_Select();
     ST7735_WriteCommand(invert ? ST7735_INVON : ST7735_INVOFF);

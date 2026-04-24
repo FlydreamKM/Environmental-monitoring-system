@@ -18,12 +18,12 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "st7735.h"
-#include "stm32f1xx_hal_gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "sht40.h"
+#include "gui.hpp"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -47,6 +47,8 @@ ADC_HandleTypeDef hadc1;
 I2C_HandleTypeDef hi2c1;
 I2C_HandleTypeDef hi2c2;
 
+RTC_HandleTypeDef hrtc;
+
 SPI_HandleTypeDef hspi1;
 DMA_HandleTypeDef hdma_spi1_rx;
 DMA_HandleTypeDef hdma_spi1_tx;
@@ -55,7 +57,10 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN PV */
-
+static uint32_t last_sensor_tick = 0;
+static uint32_t last_lux_tick = 0;
+static double sht40_temp = 0.0;
+static double sht40_hum = 0.0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -68,6 +73,7 @@ static void MX_I2C2_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_RTC_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -113,9 +119,11 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
+  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
   ST7735_Init();
-  
+  gui_init();
+  gui_draw_background();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -125,26 +133,49 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    ST7735_FillScreen(ST7735_RED);
-    ST7735_WriteString(3, 55, "Hello World", Font_11x18, ST7735_WHITE, ST7735_RED);
-    HAL_Delay(1000);
+    uint32_t now = HAL_GetTick();
 
-    ST7735_FillScreen(ST7735_BLUE);
-    ST7735_WriteString(3, 55, "Hello World", Font_11x18, ST7735_YELLOW, ST7735_BLUE);
-    HAL_Delay(1000);
+    /* 非阻塞 SHT40 读取：每 500ms 启动一次测量 */
+    if ((now - last_sensor_tick >= 200) && (SHT40_NB_GetState() == SHT40_NB_IDLE)) {
+        last_sensor_tick = now;
+        SHT40_NB_Start();
+    }
 
-    ST7735_FillScreen(ST7735_GREEN);
-    ST7735_WriteString(3, 55, "Hello World", Font_11x18, ST7735_BLACK, ST7735_GREEN);
-    HAL_Delay(1000);
+    /* 轮询 SHT40 测量结果 */
+    if (SHT40_NB_Poll(&sht40_temp, &sht40_hum)) {
+        gui_update_temp(sht40_temp);
+        gui_update_hum(sht40_hum);
+    }
 
-    ST7735_FillScreen(ST7735_BLACK);
-    ST7735_WriteString(3, 55, "Hello World", Font_11x18, ST7735_WHITE, ST7735_BLACK);
-    HAL_Delay(1000);
+    /* VEML7700 光照读取：每 200ms 读取一次 (NOWAIT 模式，不阻塞) */
+    if (now - last_lux_tick >= 100) {
+        last_lux_tick = now;
+        float lux = veml7700_read_lux();
+        gui_update_lux(lux);
+    }
 
-    HAL_GPIO_WritePin(GPIOB,GPIO_PIN_1,GPIO_PIN_SET);
-    HAL_Delay(1000);
-    HAL_GPIO_WritePin(GPIOB,GPIO_PIN_1,GPIO_PIN_RESET);
-    HAL_Delay(1000);
+    /* 烟雾 / 可燃气体预留区域，初始显示 -- */
+    static uint8_t first_run = 1;
+    if (first_run) {
+        first_run = 0;
+        gui_update_smoke(-1.0f);
+        gui_update_gas(-1.0f);
+    }
+
+    /* RTC 时间读取与显示 (每秒刷新一次) */
+    static uint32_t last_rtc_tick = 0;
+    if (now - last_rtc_tick >= 1000) {
+        last_rtc_tick = now;
+        RTC_TimeTypeDef sTime;
+        RTC_DateTypeDef sDate;
+        HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
+        HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
+        gui_update_time(sTime.Hours, sTime.Minutes, sTime.Seconds);
+    }
+
+    /* PB1 接蜂鸣器 MOS 管栅极，默认关闭，避免持续蜂鸣 */
+    /* 如需报警可在条件触发时调用 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET); */
+
   }
   /* USER CODE END 3 */
 }
@@ -162,10 +193,11 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL2;
@@ -187,7 +219,8 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_RTC|RCC_PERIPHCLK_ADC;
+  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
   PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
@@ -311,6 +344,71 @@ static void MX_I2C2_Init(void)
 }
 
 /**
+  * @brief RTC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RTC_Init(void)
+{
+
+  /* USER CODE BEGIN RTC_Init 0 */
+
+  /* USER CODE END RTC_Init 0 */
+
+  RTC_TimeTypeDef sTime = {0};
+  RTC_DateTypeDef DateToUpdate = {0};
+
+  /* USER CODE BEGIN RTC_Init 1 */
+
+  /* USER CODE END RTC_Init 1 */
+
+  /** Initialize RTC Only
+  */
+  hrtc.Instance = RTC;
+  hrtc.Init.AsynchPrediv = RTC_AUTO_1_SECOND;
+  hrtc.Init.OutPut = RTC_OUTPUTSOURCE_NONE;
+  if (HAL_RTC_Init(&hrtc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /* USER CODE BEGIN Check_RTC_BKUP */
+  HAL_PWR_EnableBkUpAccess();
+  if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1) == 0xA5A5) {
+      /* 备份域已初始化，RTC 时间由 VBAT 保持，跳过设置 */
+      HAL_PWR_DisableBkUpAccess();
+      return;
+  }
+  /* USER CODE END Check_RTC_BKUP */
+
+  /** Initialize RTC and set the Time and Date
+  */
+  sTime.Hours = 0x0;
+  sTime.Minutes = 0x0;
+  sTime.Seconds = 0x0;
+
+  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BCD) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  DateToUpdate.WeekDay = RTC_WEEKDAY_MONDAY;
+  DateToUpdate.Month = RTC_MONTH_JANUARY;
+  DateToUpdate.Date = 0x1;
+  DateToUpdate.Year = 0x0;
+
+  if (HAL_RTC_SetDate(&hrtc, &DateToUpdate, RTC_FORMAT_BCD) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RTC_Init 2 */
+  HAL_PWR_EnableBkUpAccess();
+  HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, 0xA5A5);
+  HAL_PWR_DisableBkUpAccess();
+  /* USER CODE END RTC_Init 2 */
+
+}
+
+/**
   * @brief SPI1 Initialization Function
   * @param None
   * @retval None
@@ -333,7 +431,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -500,8 +598,8 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, dc_Pin|rst_Pin|cs_Pin|ain2_Pin|ain1_Pin|bin1_Pin|bin2_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOA, blk_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, dc_Pin|rst_Pin|cs_Pin|blk_Pin
+                          |ain2_Pin|ain1_Pin|bin1_Pin|bin2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, beep_Pin|stby_Pin, GPIO_PIN_RESET);
@@ -535,7 +633,8 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
-
+  /* 点亮 ST7735 背光 */
+  HAL_GPIO_WritePin(GPIOA, blk_Pin, GPIO_PIN_SET);
   /* USER CODE END MX_GPIO_Init_2 */
 }
 

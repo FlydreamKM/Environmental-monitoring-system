@@ -24,9 +24,14 @@ set(MX_Application_Src
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/stm32f1xx_hal_msp.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/sysmem.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/syscalls.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../startup_stm32f103xb.s
+    # Custom drivers & GUI
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/st7735.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/fonts.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../startup_stm32f103xb.s
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/sht40.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/gui.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/guilite_impl.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/VEML7700_HAL.cpp
 )
 
 # STM32 HAL/LL Drivers
@@ -46,6 +51,8 @@ set(STM32_Drivers_Src
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_flash_ex.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_exti.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_i2c.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rtc.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rtc_ex.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_spi.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_tim.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_tim_ex.c
