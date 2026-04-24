@@ -113,6 +113,7 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   ST7789_Init();
+  //ST7789_Test();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -120,7 +121,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    ST7789_Test();
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -477,8 +478,8 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, dc_Pin|rst_Pin|cs_Pin|blk_Pin
-                          |ain2_Pin|ain1_Pin|bin1_Pin|bin2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, dc_Pin|rst_Pin|cs_Pin|ain2_Pin|ain1_Pin|bin1_Pin|bin2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, blk_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, beep_Pin|stby_Pin, GPIO_PIN_RESET);

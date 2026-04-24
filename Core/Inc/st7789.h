@@ -1,47 +1,88 @@
+
 #ifndef __ST7789_H
 #define __ST7789_H
 
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+
 #include "fonts.h"
-#include "main.h"
 
-/* choose a Hardware SPI port to use. */
-#define ST7789_SPI_PORT hspi1
-extern SPI_HandleTypeDef ST7789_SPI_PORT;
+#ifdef ST7789_PORT_HEADER
+#include ST7789_PORT_HEADER
+#else
+#include "st7789_port.h"
+#endif
 
-/* choose whether use DMA or not */
-#define USE_DMA
+#if !defined(CFG_NO_CS) && !defined(ST7789_USE_CS)
+#define ST7789_USE_CS
+#endif
 
-/* Pin connection*/
-#define ST7789_RST_PORT GPIOA
-#define ST7789_RST_PIN  GPIO_PIN_3
-#define ST7789_DC_PORT  GPIOA
-#define ST7789_DC_PIN   GPIO_PIN_2
-#define ST7789_CS_PORT  GPIOA
-#define ST7789_CS_PIN   GPIO_PIN_4
+#if !defined(USING_135X240) && !defined(USING_240X240) && !defined(USING_170X320) && !defined(USING_240X320)
+#define USING_240X320
+#endif
 
-/* If u need Backlight control, uncomment below */
-#define BLK_PORT GPIOA
-#define BLK_PIN GPIO_PIN_6
+#ifndef ST7789_ROTATION
+#define ST7789_ROTATION 1
+#endif
+
+#ifndef ST7789_USE_DMA
+#define ST7789_USE_DMA 1
+#endif
+
+#ifndef ST7789_DELAY
+#error ST7789 port header must define ST7789_DELAY(ms)
+#endif
+
+#ifndef ST7789_SPI_WRITE
+#error ST7789 port header must define ST7789_SPI_WRITE(data, size)
+#endif
+
+#if ST7789_USE_DMA
+#ifndef ST7789_SPI_WRITE_DMA
+#error ST7789 port header must define ST7789_SPI_WRITE_DMA(data, size) when ST7789_USE_DMA is enabled
+#endif
+
+#ifndef ST7789_SPI_WAIT_DMA
+#error ST7789 port header must define ST7789_SPI_WAIT_DMA() when ST7789_USE_DMA is enabled
+#endif
+#endif
+
+#ifndef ST7789_RST_Clr
+#error ST7789 port header must define ST7789_RST_Clr()
+#endif
+
+#ifndef ST7789_RST_Set
+#error ST7789 port header must define ST7789_RST_Set()
+#endif
+
+#ifndef ST7789_DC_Clr
+#error ST7789 port header must define ST7789_DC_Clr()
+#endif
+
+#ifndef ST7789_DC_Set
+#error ST7789 port header must define ST7789_DC_Set()
+#endif
+
+#ifndef ST7789_Select
+#error ST7789 port header must define ST7789_Select()
+#endif
+
+#ifndef ST7789_UnSelect
+#error ST7789 port header must define ST7789_UnSelect()
+#endif
 
 
 /*
  * Comment one to use another.
  * 3 parameters can be choosed
- * 135x240(0.96 inch) & 240x240(1.3inch) & 170x320(1.9inch) & 240x320(2.0inch)
+ * 135x240(0.96 inch) & 240x240(1.3inch) & 170x320(1.9inch)
  * X_SHIFT & Y_SHIFT are used to adapt different display's resolution
  */
 
-/* Choose a type you are using */
-//#define USING_135X240
-//#define USING_240X240
-//#define USING_170X320
-#define USING_240X320
-
-/* Choose a display rotation you want to use: (0-3) */
-//#define ST7789_ROTATION 0
-//#define ST7789_ROTATION 1
-#define ST7789_ROTATION 2				//  use Normally on 240x240
-//#define ST7789_ROTATION 3
+/* Choose a type you are using through compile definitions or by editing this header.
+ * Defaults to 240x320 if no geometry macro is provided.
+ */
 
 #ifdef USING_135X240
 
@@ -157,7 +198,6 @@ extern SPI_HandleTypeDef ST7789_SPI_PORT;
         #define X_SHIFT 0
         #define Y_SHIFT 0
     #endif
-
 #endif
 
 /**
@@ -182,6 +222,8 @@ extern SPI_HandleTypeDef ST7789_SPI_PORT;
 #define DARKBLUE    0X01CF
 #define LIGHTBLUE   0X7D7C
 #define GRAYBLUE    0X5458
+#define PINK        0XFA2F
+#define PALEPINK    0xfd5a
 
 #define LIGHTGREEN  0X841F
 #define LGRAY       0XC618
@@ -229,6 +271,7 @@ extern SPI_HandleTypeDef ST7789_SPI_PORT;
 #define ST7789_MADCTL_ML  0x10
 /* RGB/BGR Order ('0' = RGB, '1' = BGR) */
 #define ST7789_MADCTL_RGB 0x00
+#define ST7789_MADCTL_BGR 0x08
 
 #define ST7789_RDID1   0xDA
 #define ST7789_RDID2   0xDB
@@ -237,18 +280,16 @@ extern SPI_HandleTypeDef ST7789_SPI_PORT;
 
 /* Advanced options */
 #define ST7789_COLOR_MODE_16bit 0x55    //  RGB565 (16bit)
-#define ST7789_COLOR_MODE_18bit 0x66    //  RGB666 (18bit)
-
-/* Basic operations */
-#define ST7789_RST_Clr() HAL_GPIO_WritePin(ST7789_RST_PORT, ST7789_RST_PIN, GPIO_PIN_RESET)
-#define ST7789_RST_Set() HAL_GPIO_WritePin(ST7789_RST_PORT, ST7789_RST_PIN, GPIO_PIN_SET)
-
-#define ST7789_DC_Clr() HAL_GPIO_WritePin(ST7789_DC_PORT, ST7789_DC_PIN, GPIO_PIN_RESET)
-#define ST7789_DC_Set() HAL_GPIO_WritePin(ST7789_DC_PORT, ST7789_DC_PIN, GPIO_PIN_SET)
-#define ST7789_Select() HAL_GPIO_WritePin(ST7789_CS_PORT, ST7789_CS_PIN, GPIO_PIN_RESET)
-#define ST7789_UnSelect() HAL_GPIO_WritePin(ST7789_CS_PORT, ST7789_CS_PIN, GPIO_PIN_SET)
+#define ST7789_COLOR_MODE_18bit 0x66    //  RGB666 (18bit)  // Will not work correctly with this lib
 
 #define ABS(x) ((x) > 0 ? (x) : -(x))
+
+#ifdef __CROSSWORKS_ARM
+  #define NEWLINE   10
+  #define FORMFEED  12
+  #define CR        13
+#endif
+
 
 /* Basic functions. */
 void ST7789_Init(void);
@@ -269,23 +310,39 @@ void ST7789_InvertColors(uint8_t invert);
 void ST7789_WriteChar(uint16_t x, uint16_t y, char ch, FontDef font, uint16_t color, uint16_t bgcolor);
 void ST7789_WriteString(uint16_t x, uint16_t y, const char *str, FontDef font, uint16_t color, uint16_t bgcolor);
 
+#ifdef __CROSSWORKS_ARM
+int __putchar(int ch, __printf_tag_ptr ptr);
+void ST7789_SetPrintColours( uint16_t fg_colour, uint16_t bg_colour );
+void ST7789_SetPrintFont( FontDef chosen_font );
+void ST7789_Locate( uint8_t new_cx, uint8_t new_cy );
+#endif
+
 /* Extented Graphical functions. */
 void ST7789_DrawFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
 void ST7789_DrawTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t x3, uint16_t y3, uint16_t color);
 void ST7789_DrawFilledTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t x3, uint16_t y3, uint16_t color);
 void ST7789_DrawFilledCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
-void ST7789_DrawQuarterCircle(uint16_t x0, uint16_t y0, uint8_t r, uint16_t color, uint8_t quadrant);
-void ST7789_DrawRoundRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t r, uint16_t color);
-void ST7789_FillRoundRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t r, uint16_t color);
-void ST7789_FillQuarterCircle(uint16_t x0, uint16_t y0, uint8_t r, uint16_t color, uint8_t quadrant);
+
 /* Command functions */
 void ST7789_TearEffect(uint8_t tear);
 
 /* Simple test function. */
 void ST7789_Test(void);
+void ST7789_TestColors(void);
+void ST7789_WriteDataDMA(uint8_t *buff, size_t buff_size);
+
+/* Fast drawing with DMA */
+void ST7789_DrawFastHLine(uint16_t x, uint16_t y, uint16_t w, uint16_t color);
+void ST7789_DrawFastVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color);
+
+void ST7789_DrawFastFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
+void ST7789_DrawFastFilledTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t x3, uint16_t y3, uint16_t color);
+void ST7789_DrawFastFilledCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
+
+void ST7789_WriteFastString(uint16_t x, uint16_t y, const char *str, FontDef font, uint16_t color, uint16_t bgcolor);
 
 #ifndef ST7789_ROTATION
     #error You should at least choose a display rotation!
 #endif
 
-#endif /* __ST7789_H */
+#endif
