@@ -1,7 +1,19 @@
-#include "MAX30105.h"
-#include <string.h>   // 用于 memcpy
+/**
+  ******************************************************************************
+  * @file    MAX30105.cpp
+  * @brief   MAX30105 多LED光学传感器驱动实现。
+  *          从 SparkFun MAX3010x 库移植到 STM32 HAL I2C。
+  *          提供 FIFO 读取、LED 配置、中断处理和芯片温度读取。
+  * @author  Health Monitor Project Team
+  * @date    2026
+  * @copyright Based on SparkFun MAX30105 library, ported to STM32 HAL.
+  ******************************************************************************
+  */
 
-// 寄存器地址定义（与原始库相同）
+#include "MAX30105.h"
+#include <string.h>
+
+/* ===================== 寄存器地址定义 ===================== */
 static const uint8_t MAX30105_INTSTAT1 =      0x00;
 static const uint8_t MAX30105_INTSTAT2 =      0x01;
 static const uint8_t MAX30105_INTENABLE1 =    0x02;
@@ -26,7 +38,7 @@ static const uint8_t MAX30105_PROXINTTHRESH = 0x30;
 static const uint8_t MAX30105_REVISIONID =    0xFE;
 static const uint8_t MAX30105_PARTID =        0xFF;
 
-// 常量定义
+/* ===================== 位掩码常量 ===================== */
 static const uint8_t MAX30105_INT_A_FULL_MASK =     (uint8_t)~0b10000000;
 static const uint8_t MAX30105_INT_A_FULL_ENABLE =   0x80;
 static const uint8_t MAX30105_INT_A_FULL_DISABLE =  0x00;
@@ -89,7 +101,7 @@ static const uint8_t MAX30105_SLOT1_MASK = 0xF8;
 static const uint8_t MAX30105_SLOT2_MASK = 0x8F;
 static const uint8_t MAX30105_SLOT3_MASK = 0xF8;
 static const uint8_t MAX30105_SLOT4_MASK = 0x8F;
-/* 槽位常量已移至 MAX30105.h */
+/* 时隙常量已移至 MAX30105.h */
 
 static const uint8_t MAX_30105_EXPECTEDPARTID = 0x15;
 static const int STORAGE_SIZE = 4;
@@ -102,9 +114,9 @@ struct Record {
     uint8_t tail;
 } sense;
 
-// 构造函数
+/* ===================== 构造函数 ===================== */
 MAX30105::MAX30105() {
-    // 初始化成员变量
+    /* ===================== 成员变量初始化 ===================== */
     _i2caddr = MAX30105_ADDRESS;
     activeLEDs = 2;  // 默认 Red+IR
     revisionID = 0;
@@ -122,7 +134,7 @@ bool MAX30105::begin(uint8_t i2caddr) {
     return true;
 }
 
-// 底层 I2C 读写（HAL 实现）
+/* ===================== 底层 I2C ===================== */
 uint8_t MAX30105::readRegister8(uint8_t address, uint8_t reg) {
     uint8_t data = 0;
     HAL_I2C_Mem_Read(&hi2c1, address << 1, reg, I2C_MEMADD_SIZE_8BIT, &data, 1, HAL_MAX_DELAY);
@@ -133,7 +145,7 @@ void MAX30105::writeRegister8(uint8_t address, uint8_t reg, uint8_t value) {
     HAL_I2C_Mem_Write(&hi2c1, address << 1, reg, I2C_MEMADD_SIZE_8BIT, &value, 1, HAL_MAX_DELAY);
 }
 
-// 中断状态读取
+/* ===================== 中断状态 ===================== */
 uint8_t MAX30105::getINT1(void) {
     return readRegister8(_i2caddr, MAX30105_INTSTAT1);
 }
@@ -172,7 +184,7 @@ void MAX30105::disableDIETEMPRDY(void) {
     bitMask(MAX30105_INTENABLE2, MAX30105_INT_DIE_TEMP_RDY_MASK, MAX30105_INT_DIE_TEMP_RDY_DISABLE);
 }
 
-// 软复位
+/* ===================== 复位与电源 ===================== */
 void MAX30105::softReset(void) {
     bitMask(MAX30105_MODECONFIG, MAX30105_RESET_MASK, MAX30105_RESET);
     uint32_t startTime = _millis();
@@ -302,7 +314,7 @@ void MAX30105::setup(uint8_t powerLevel, uint8_t sampleAverage, uint8_t ledMode,
                      int sampleRate, int pulseWidth, int adcRange) {
     softReset();
 
-    // FIFO 平均配置
+    /* ===================== FIFO 配置 ===================== */
     if (sampleAverage == 1) setFIFOAverage(MAX30105_SAMPLEAVG_1);
     else if (sampleAverage == 2) setFIFOAverage(MAX30105_SAMPLEAVG_2);
     else if (sampleAverage == 4) setFIFOAverage(MAX30105_SAMPLEAVG_4);
@@ -312,20 +324,20 @@ void MAX30105::setup(uint8_t powerLevel, uint8_t sampleAverage, uint8_t ledMode,
     else setFIFOAverage(MAX30105_SAMPLEAVG_4);
     enableFIFORollover();
 
-    // LED 模式
+    /* LED 模式 */
     if (ledMode == 3) setLEDMode(MAX30105_MODE_MULTILED);
     else if (ledMode == 2) setLEDMode(MAX30105_MODE_REDIRONLY);
     else setLEDMode(MAX30105_MODE_REDONLY);
     activeLEDs = ledMode;
 
-    // ADC 范围
+    /* ADC 量程 */
     if (adcRange < 4096) setADCRange(MAX30105_ADCRANGE_2048);
     else if (adcRange < 8192) setADCRange(MAX30105_ADCRANGE_4096);
     else if (adcRange < 16384) setADCRange(MAX30105_ADCRANGE_8192);
     else if (adcRange == 16384) setADCRange(MAX30105_ADCRANGE_16384);
     else setADCRange(MAX30105_ADCRANGE_2048);
 
-    // 采样率
+    /* 采样率 */
     if (sampleRate < 100) setSampleRate(MAX30105_SAMPLERATE_50);
     else if (sampleRate < 200) setSampleRate(MAX30105_SAMPLERATE_100);
     else if (sampleRate < 400) setSampleRate(MAX30105_SAMPLERATE_200);
@@ -336,20 +348,20 @@ void MAX30105::setup(uint8_t powerLevel, uint8_t sampleAverage, uint8_t ledMode,
     else if (sampleRate == 3200) setSampleRate(MAX30105_SAMPLERATE_3200);
     else setSampleRate(MAX30105_SAMPLERATE_50);
 
-    // 脉冲宽度
+    /* 脉冲宽度 */
     if (pulseWidth < 118) setPulseWidth(MAX30105_PULSEWIDTH_69);
     else if (pulseWidth < 215) setPulseWidth(MAX30105_PULSEWIDTH_118);
     else if (pulseWidth < 411) setPulseWidth(MAX30105_PULSEWIDTH_215);
     else if (pulseWidth == 411) setPulseWidth(MAX30105_PULSEWIDTH_411);
     else setPulseWidth(MAX30105_PULSEWIDTH_69);
 
-    // LED 电流
+    /* LED 电流幅值 */
     setPulseAmplitudeRed(powerLevel);
     setPulseAmplitudeIR(powerLevel);
     setPulseAmplitudeGreen(powerLevel);
     setPulseAmplitudeProximity(powerLevel);
 
-    // 多 LED 槽位
+    /* 多LED时隙分配 */
     enableSlot(1, SLOT_RED_LED);
     if (ledMode > 1) enableSlot(2, SLOT_IR_LED);
     if (ledMode > 2) enableSlot(3, SLOT_GREEN_LED);
@@ -405,7 +417,7 @@ uint16_t MAX30105::check(void) {
     uint8_t *ptr = fifoBuffer;
     for (int i = 0; i < numSamples; i++) {
         sense.head = (sense.head + 1) % STORAGE_SIZE;
-        // 读取第一个 LED（RED）
+        /* 读取第一个LED（红光） */
         uint32_t val = ((uint32_t)ptr[0] << 16) | ((uint32_t)ptr[1] << 8) | ptr[2];
         sense.red[sense.head] = val & 0x3FFFF;
         ptr += 3;

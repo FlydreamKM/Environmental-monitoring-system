@@ -1,3 +1,15 @@
+/**
+  ******************************************************************************
+  * @file    GuiLite.h
+  * @brief   GuiLite 超轻量级 GUI 框架头文件。
+  *          为嵌入式系统提供基础控件、颜色宏、对齐常量及平台抽象。
+  * @author  GuiLite Project (https://github.com/idea4good/GuiLite)
+  * @date    2026
+  * @copyright Copyright (c) GuiLite authors. Licensed under Apache-2.0.
+  * @note    本文件作为第三方依赖引入；仅顶部注释块为项目一致性而添加。
+  ******************************************************************************
+  */
+
 #pragma once
 #define REAL_TIME_TASK_CYCLE_MS		50
 #define MAX(a,b) (((a)>(b))?(a):(b))

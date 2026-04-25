@@ -1,37 +1,80 @@
+/**
+  ******************************************************************************
+  * @file    sht40.h
+  * @brief   SHT40 温湿度传感器驱动头文件。
+  *          通过 I2C2 提供阻塞式和非阻塞式 (NB) API。
+  * @author  Health Monitor Project Team
+  * @date    2026
+  * @copyright 基于公开 SHT40 示例，适配 STM32 HAL。
+  ******************************************************************************
+  */
 
-/********************************Copyright (c)**********************************\
-**
-**                   (c) Copyright 2023, Main, China, 被钢琴支配的悲惨大学生.
-**                           All Rights Reserved
-**
-**                           By(被钢琴支配的悲惨大学生 personally owned)
-**                           https://blog.csdn.net/m0_71226271?type=blog
-**
-**----------------------------------文件信息------------------------------------
-** 文件名称: SHT40.h
-** 创建人员: 被钢琴支配的悲惨大学生
-** 创建日期: 2023-09-04
-** 文档描述:基于STM32H7B0VBT6的HAL库SHT40驱动源码，使用硬件I2C
-\********************************End of Head************************************/
+#ifndef __SHT40_H
+#define __SHT40_H
+
 #include "main.h"
-extern I2C_HandleTypeDef hi2c2;
-/**************************I2C地址****************************/
-#define SHT30_Write (0x44<<1)   //写入地址
-#define SHT30_Read  ((0x44<<1)+1)   //读出地址
-/**************************SHT40命令****************************/
-#define SHT40_MEASURE_TEMPERATURE_HUMIDITY 0xFD  //高精度读取温湿度命令
-#define SHT40_READ_SERIAL_NUMBER 0x89                         //读取唯一序列号命令
-#define SHT40_HEATER_200mW_1s 0x39                               //200mW加热1秒命令
-/**************************API****************************/
-void SHT40_Read_Temperature_Humidity(double *Temperature,double *Humidity);
+
+/* ===================== I2C 地址 ===================== */
+
+#define SHT30_Write (0x44 << 1)      /*!< SHT40 I2C 写地址 */
+#define SHT30_Read  ((0x44 << 1) + 1) /*!< SHT40 I2C 读地址 */
+
+/* ===================== 命令常量 ===================== */
+
+#define SHT40_MEASURE_TEMPERATURE_HUMIDITY 0xFD /*!< 高精度测量 */
+#define SHT40_READ_SERIAL_NUMBER           0x89 /*!< 读取唯一 32 位序列号 */
+#define SHT40_HEATER_200mW_1s              0x39 /*!< 加热器 200 mW，持续 1 秒 */
+
+/* ===================== 阻塞式 API ===================== */
+
+/**
+  * @brief  读取温度和湿度（阻塞式，约 20 ms，含延时）。
+  * @param  Temperature  温度输出指针，单位为 °C
+  * @param  Humidity     相对湿度输出指针，单位为 %RH
+  * @note   CRC 字节已接收但未校验。
+  */
+void SHT40_Read_Temperature_Humidity(double *Temperature, double *Humidity);
+
+/**
+  * @brief  读取工厂烧录的 32 位序列号。
+  * @retval 序列号值。
+  */
 uint32_t SHT40_Read_Serial_Number(void);
+
+/**
+  * @brief  激活内部加热器（200 mW，持续 1 秒）以去除冷凝水。
+  * @note   使用时间不得超过总运行时间的 10%，以避免过热。
+  */
 void SHT40_Heater_200mW_1s(void);
-/**************************非阻塞API****************************/
+
+/* ===================== 非阻塞式 API ===================== */
+
+/**
+  * @brief  非阻塞状态机状态。
+  */
 typedef enum {
-    SHT40_NB_IDLE = 0,
-    SHT40_NB_WAITING
+    SHT40_NB_IDLE = 0,   /*!< 就绪，可开始新测量 */
+    SHT40_NB_WAITING     /*!< 测量命令已发送，等待转换完成 */
 } SHT40_NB_State;
 
+/**
+  * @brief  获取当前非阻塞状态。
+  * @retval 当前 SHT40_NB_State 值。
+  */
 SHT40_NB_State SHT40_NB_GetState(void);
+
+/**
+  * @brief  启动非阻塞测量（发送 I2C 命令，耗时 < 1 ms）。
+  */
 void SHT40_NB_Start(void);
+
+/**
+  * @brief  轮询非阻塞测量完成状态。
+  * @note   在 Start() 后自动等待 >= 10 ms 再读取数据。
+  * @param  Temperature  温度输出指针，单位为 °C
+  * @param  Humidity     相对湿度输出指针，单位为 %RH
+  * @retval 若读取到新数据且状态已返回 IDLE 则为 1，否则为 0。
+  */
 uint8_t SHT40_NB_Poll(double *Temperature, double *Humidity);
+
+#endif /* __SHT40_H */
