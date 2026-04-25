@@ -17,6 +17,7 @@ void gui_update_gas(double ppm);
 void gui_update_time(uint8_t hour, uint8_t minute, uint8_t second);
 
 float veml7700_read_lux(void);
+float smoke_detector_read(void);
 
 #ifdef __cplusplus
 }

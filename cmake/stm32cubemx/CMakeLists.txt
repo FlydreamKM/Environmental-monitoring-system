@@ -32,6 +32,8 @@ set(MX_Application_Src
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/gui.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/guilite_impl.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/VEML7700_HAL.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/MAX30105.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/SmokeDetector_HAL.cpp
 )
 
 # STM32 HAL/LL Drivers

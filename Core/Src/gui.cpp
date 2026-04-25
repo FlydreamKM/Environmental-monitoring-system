@@ -4,10 +4,12 @@
 #include "st7735.h"
 #include "fonts.h"
 #include "VEML7700_HAL.h"
+#include "SmokeDetector_HAL.h"
 #include <string.h>
 #include <stdio.h>
 
 extern I2C_HandleTypeDef hi2c2;
+extern I2C_HandleTypeDef hi2c1;
 
 /* ============================================================
  *  1. 汉字 16x16 点阵字模 (1bpp, MSB在前)
@@ -197,10 +199,16 @@ static void buf_draw_chinese(int x, int y, const uint8_t* bitmap, uint16_t fg, u
  * ============================================================ */
 
 static VEML7700_HAL veml7700;
+static SmokeDetectorHAL smokeDetector;
 
 extern "C" float veml7700_read_lux(void)
 {
     return veml7700.readLux(VEML_LUX_NORMAL_NOWAIT);
+}
+
+extern "C" float smoke_detector_read(void)
+{
+    return smokeDetector.getSmokeConcentration();
 }
 
 /* ============================================================
@@ -233,6 +241,10 @@ extern "C" void gui_init(void)
 
     /* 初始化 VEML7700 (I2C2, 地址0x10) */
     veml7700.begin(&hi2c2, VEML7700_I2CADDR_DEFAULT);
+
+    /* 初始化 MAX30105 烟雾检测 (I2C1, 地址0x57) */
+    smokeDetector.begin();
+    smokeDetector.calibrateBaseline(100);  /* 100个样本, 约500ms基线校准 */
 }
 
 extern "C" void gui_draw_background(void)

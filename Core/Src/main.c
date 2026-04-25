@@ -154,11 +154,18 @@ int main(void)
         gui_update_lux(lux);
     }
 
-    /* 烟雾 / 可燃气体预留区域，初始显示 -- */
+    /* MAX30105 烟雾读取：每 200ms 读取一次 */
+    static uint32_t last_smoke_tick = 0;
+    if (now - last_smoke_tick >= 200) {
+        last_smoke_tick = now;
+        float ppm = smoke_detector_read();
+        gui_update_smoke(ppm);
+    }
+
+    /* 可燃气体预留区域，初始显示 -- */
     static uint8_t first_run = 1;
     if (first_run) {
         first_run = 0;
-        gui_update_smoke(-1.0f);
         gui_update_gas(-1.0f);
     }
 
