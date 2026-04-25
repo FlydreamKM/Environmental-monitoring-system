@@ -23,6 +23,8 @@
 /* USER CODE BEGIN Includes */
 #include "sht40.h"
 #include "gui.hpp"
+#include "tb6612.h"
+#include "mp4.h"
 #include <stdio.h>
 /* USER CODE END Includes */
 
@@ -61,6 +63,8 @@ static uint32_t last_sensor_tick = 0;
 static uint32_t last_lux_tick = 0;
 static double sht40_temp = 0.0;
 static double sht40_hum = 0.0;
+static uint8_t gas_alarm = 0;
+static uint8_t smoke_alarm = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -80,6 +84,119 @@ static void MX_RTC_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/**
+  * @brief  蜂鸣器三联短音状态机（非阻塞）
+  *         报警时：滴滴滴(100ms ON / 100ms OFF x3) → 停顿 500ms → 循环
+  *         正常时：立即关闭
+  */
+static void buzzer_update(uint8_t alarm)
+{
+    static uint32_t tick = 0;
+    static uint8_t phase = 0; /* 0=idle, 1=on1, 2=off1, 3=on2, 4=off2, 5=on3, 6=pause */
+    uint32_t now = HAL_GetTick();
+
+    if (!alarm) {
+        if (phase != 0) {
+            HAL_GPIO_WritePin(beep_GPIO_Port, beep_Pin, GPIO_PIN_RESET);
+            phase = 0;
+        }
+        return;
+    }
+
+    if (phase == 0) {
+        HAL_GPIO_WritePin(beep_GPIO_Port, beep_Pin, GPIO_PIN_SET);
+        tick = now;
+        phase = 1;
+    } else if (phase == 1) { /* on1: 100ms */
+        if (now - tick >= 100) {
+            HAL_GPIO_WritePin(beep_GPIO_Port, beep_Pin, GPIO_PIN_RESET);
+            tick = now;
+            phase = 2;
+        }
+    } else if (phase == 2) { /* off1: 50ms 急促间隔 */
+        if (now - tick >= 50) {
+            HAL_GPIO_WritePin(beep_GPIO_Port, beep_Pin, GPIO_PIN_SET);
+            tick = now;
+            phase = 3;
+        }
+    } else if (phase == 3) { /* on2: 100ms */
+        if (now - tick >= 100) {
+            HAL_GPIO_WritePin(beep_GPIO_Port, beep_Pin, GPIO_PIN_RESET);
+            tick = now;
+            phase = 4;
+        }
+    } else if (phase == 4) { /* off2: 50ms 急促间隔 */
+        if (now - tick >= 50) {
+            HAL_GPIO_WritePin(beep_GPIO_Port, beep_Pin, GPIO_PIN_SET);
+            tick = now;
+            phase = 5;
+        }
+    } else if (phase == 5) { /* on3: 100ms */
+        if (now - tick >= 100) {
+            HAL_GPIO_WritePin(beep_GPIO_Port, beep_Pin, GPIO_PIN_RESET);
+            tick = now;
+            phase = 6;
+        }
+    } else if (phase == 6) { /* pause: 1200ms 长停顿 --- */
+        if (now - tick >= 1200) {
+            HAL_GPIO_WritePin(beep_GPIO_Port, beep_Pin, GPIO_PIN_SET);
+            tick = now;
+            phase = 1; /* 重新开始三联音 */
+        }
+    }
+}
+
+/* 电机转速映射: 1000ppm -> 0, 5000ppm -> 满速(65535) */
+#define MOTOR_START_PPM   1000.0f
+#define MOTOR_STOP_PPM    900.0f
+#define MOTOR_FULL_PPM    5000.0f
+
+static uint16_t ppm_to_pwm(float ppm)
+{
+    if (ppm <= MOTOR_START_PPM) return 0;
+    float ratio = (ppm - MOTOR_START_PPM) / (MOTOR_FULL_PPM - MOTOR_START_PPM);
+    if (ratio > 1.0f) ratio = 1.0f;
+    return (uint16_t)(ratio * 65535.0f);
+}
+
+/* TIM1 电机A - 烟雾控制 */
+static void motorA_update(float ppm)
+{
+    static uint8_t running = 0;
+    if (running) {
+        if (ppm < MOTOR_STOP_PPM) {
+            TB6612_SetMotorA(TB6612_STOP, 0);
+            running = 0;
+        } else {
+            TB6612_SetMotorA(TB6612_CW, ppm_to_pwm(ppm));
+        }
+    } else {
+        if (ppm > MOTOR_START_PPM) {
+            running = 1;
+            TB6612_SetMotorA(TB6612_CW, ppm_to_pwm(ppm));
+        }
+    }
+}
+
+/* TIM2 电机B - 可燃气体控制 */
+static void motorB_update(float ppm)
+{
+    static uint8_t running = 0;
+    if (running) {
+        if (ppm < MOTOR_STOP_PPM) {
+            TB6612_SetMotorB(TB6612_STOP, 0);
+            running = 0;
+        } else {
+            TB6612_SetMotorB(TB6612_CW, ppm_to_pwm(ppm));
+        }
+    } else {
+        if (ppm > MOTOR_START_PPM) {
+            running = 1;
+            TB6612_SetMotorB(TB6612_CW, ppm_to_pwm(ppm));
+        }
+    }
+}
 
 /* USER CODE END 0 */
 
@@ -121,9 +238,19 @@ int main(void)
   MX_TIM2_Init();
   MX_RTC_Init();
   /* USER CODE BEGIN 2 */
+  TB6612_Init();
   ST7735_Init();
   gui_init();
   gui_draw_background();
+
+  /* MP4 可燃气体传感器初始化 (跳过预热和校准，使用默认 R0 直接出数) */
+  MP4_Init();
+  {
+      MP4_Data_t* d = MP4_GetData();
+      d->R0 = 40000.0f;      /* 典型默认值，仅作参考；如需准确浓度请执行 CalibrateR0 */
+      d->IsCalibrated = 1;
+      d->IsWarmedUp = 1;
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -140,6 +267,8 @@ int main(void)
         last_sensor_tick = now;
         SHT40_NB_Start();
     }
+  
+  
 
     /* 轮询 SHT40 测量结果 */
     if (SHT40_NB_Poll(&sht40_temp, &sht40_hum)) {
@@ -156,18 +285,40 @@ int main(void)
 
     /* MAX30105 烟雾读取：每 200ms 读取一次 */
     static uint32_t last_smoke_tick = 0;
+    static float smoke_ppm = 0.0f;
     if (now - last_smoke_tick >= 200) {
         last_smoke_tick = now;
-        float ppm = smoke_detector_read();
-        gui_update_smoke(ppm);
+        smoke_ppm = smoke_detector_read();
+        gui_update_smoke(smoke_ppm);
+        if (smoke_ppm >= 0.0f) {
+            smoke_alarm = (smoke_ppm >= 1000.0f) ? 1 : 0;
+            motorA_update(smoke_ppm);
+        } else {
+            smoke_alarm = 0;
+        }
     }
 
-    /* 可燃气体预留区域，初始显示 -- */
-    static uint8_t first_run = 1;
-    if (first_run) {
-        first_run = 0;
-        gui_update_gas(-1.0f);
+    /* MP4 可燃气体读取：每 500ms 读取一次 (内部约 250ms 阻塞采样) */
+    static uint32_t last_gas_tick = 0;
+    static float gas_ppm = 0.0f;
+    if (now - last_gas_tick >= 500) {
+        last_gas_tick = now;
+        MP4_Status_t status = MP4_Read();
+        if (status == MP4_STATUS_OK || status == MP4_STATUS_WARMING_UP) {
+            MP4_Data_t* data = MP4_GetData();
+            gas_ppm = data->Ppm;
+            gui_update_gas((double)gas_ppm);
+            gas_alarm = (gas_ppm >= MP4_ALARM_THRESHOLD) ? 1 : 0;
+        } else {
+            gui_update_gas(-1.0); /* 未校准或错误时显示 -- */
+            gas_ppm = 0.0f;
+            gas_alarm = 0;
+        }
+        motorB_update(gas_ppm);
     }
+
+    /* 蜂鸣器报警：烟雾或可燃气体任一超标都触发，正常后关闭 */
+    buzzer_update(gas_alarm || smoke_alarm);
 
     /* RTC 时间读取与显示 (每秒刷新一次) */
     static uint32_t last_rtc_tick = 0;
@@ -179,9 +330,6 @@ int main(void)
         HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
         gui_update_time(sTime.Hours, sTime.Minutes, sTime.Seconds);
     }
-
-    /* PB1 接蜂鸣器 MOS 管栅极，默认关闭，避免持续蜂鸣 */
-    /* 如需报警可在条件触发时调用 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET); */
 
   }
   /* USER CODE END 3 */
@@ -277,7 +425,14 @@ static void MX_ADC1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN ADC1_Init 2 */
-
+  /* MP4 可燃气体传感器接 PA1 (ADC1_IN1) */
+  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE END ADC1_Init 2 */
 
 }

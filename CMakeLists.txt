@@ -34,6 +34,12 @@ enable_language(C ASM)
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
+# mp4.c 引入 powf，-O0 下 math 库体积过大导致 FLASH 溢出，
+# Debug 下启用 -Os 以平衡大小与调试信息。
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
+    $<$<CONFIG:Debug>:-Os>
+)
+
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 

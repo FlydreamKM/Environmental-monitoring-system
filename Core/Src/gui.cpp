@@ -128,7 +128,7 @@ static const uint8_t* get_chinese_bitmap(const char* utf8)
  *  2. 局部双缓冲 (80 x 24 x 16bit = 3840 bytes)  左栏卡片用
  * ============================================================ */
 
-#define LEFT_W   80
+#define LEFT_W   100
 #define CARD_H   24
 
 static uint16_t gui_backbuf[LEFT_W * CARD_H];
@@ -222,7 +222,7 @@ static void gui_flush_left_card(int screen_y, uint16_t bg_color,
     /* 单汉字标签 16x16, 居中于 24高: (24-16)/2 = 4 */
     buf_draw_chinese(4, 4, label_bmp, COL_WHITE, bg_color);
     /* 数值 11x18, 居中于 24高: (24-18)/2 = 3 */
-    buf_draw_string(24, 3, value_str, Font_11x18, COL_WHITE, bg_color);
+    buf_draw_string(22, 3, value_str, Font_11x18, COL_WHITE, bg_color);
     ST7735_PushBuffer(0, screen_y, LEFT_W, CARD_H, gui_backbuf);
 }
 
@@ -252,7 +252,7 @@ extern "C" void gui_draw_background(void)
     /* 全屏黑色 */
     ST7735_FillScreenFast(ST7735_BLACK);
 
-    /* 左栏五个卡片背景 (80x24) */
+    /* 左栏五个卡片背景 (100x24) */
     ST7735_FillRectangleFast(0, 0,   LEFT_W, CARD_H, COL_TEMP_BG);
     ST7735_FillRectangleFast(0, 24,  LEFT_W, CARD_H, COL_HUM_BG);
     ST7735_FillRectangleFast(0, 48,  LEFT_W, CARD_H, COL_LUX_BG);
@@ -273,7 +273,7 @@ extern "C" void gui_update_temp(double temp)
     int whole = (int)temp;
     int frac  = (int)((temp >= 0 ? temp : -temp) * 10) % 10;
     char buf[16];
-    snprintf(buf, sizeof(buf), "%d.%d", whole, frac);
+    snprintf(buf, sizeof(buf), "%d.%dC", whole, frac);
 
     gui_flush_left_card(0, COL_TEMP_BG, CHINESE_WEN, buf);
     last = temp;
@@ -288,8 +288,8 @@ extern "C" void gui_update_hum(double hum)
 
     int whole = (int)hum;
     int frac  = (int)((hum >= 0 ? hum : -hum) * 10) % 10;
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d.%d", whole, frac);
+    char buf[20];
+    snprintf(buf, sizeof(buf), "%d.%d%%", whole, frac);
 
     gui_flush_left_card(24, COL_HUM_BG, CHINESE_SHI, buf);
     last = hum;
@@ -336,12 +336,12 @@ extern "C" void gui_update_smoke(double ppm)
     int prev = last;
     if (now == prev) return;
 
-    char buf[16];
+    char buf[20];
     if (ppm < 0) {
         snprintf(buf, sizeof(buf), "--");
     } else {
         int val = (int)(ppm * 10.0 + 0.5);
-        snprintf(buf, sizeof(buf), "%d.%d", val / 10, val % 10);
+        snprintf(buf, sizeof(buf), "%d.%dppm", val / 10, val % 10);
     }
 
     gui_flush_left_card(72, COL_SMOKE_BG, CHINESE_YAN, buf);
@@ -355,12 +355,12 @@ extern "C" void gui_update_gas(double ppm)
     int prev = last;
     if (now == prev) return;
 
-    char buf[16];
+    char buf[20];
     if (ppm < 0) {
         snprintf(buf, sizeof(buf), "--");
     } else {
         int val = (int)(ppm * 10.0 + 0.5);
-        snprintf(buf, sizeof(buf), "%d.%d", val / 10, val % 10);
+        snprintf(buf, sizeof(buf), "%d.%dppm", val / 10, val % 10);
     }
 
     gui_flush_left_card(96, COL_GAS_BG, CHINESE_QI, buf);
@@ -368,81 +368,32 @@ extern "C" void gui_update_gas(double ppm)
 }
 
 /* ============================================================
- *  7. 右栏 RTC 时间显示 (48 x 26 局部双缓冲)
+ *  7. 右栏 RTC 时间显示 (直接用 ST7735_WriteString，避免 PushBuffer 字节序问题)
  * ============================================================ */
-
-#define TIME_W   48
-#define TIME_H   26
-
-static uint16_t time_backbuf[TIME_W * TIME_H];
-
-static void time_buf_clear(uint16_t color)
-{
-    for (int i = 0; i < TIME_W * TIME_H; i++) {
-        time_backbuf[i] = color;
-    }
-}
-
-static void time_buf_pixel(int x, int y, uint16_t color)
-{
-    if (x >= 0 && x < TIME_W && y >= 0 && y < TIME_H) {
-        time_backbuf[y * TIME_W + x] = color;
-    }
-}
-
-static void time_buf_draw_char(int x, int y, char ch, FontDef font, uint16_t fg, uint16_t bg)
-{
-    if (ch < 32 || ch > 126) ch = '?';
-    int idx = (ch - 32) * font.height;
-    for (int row = 0; row < font.height; row++) {
-        uint16_t line = font.data[idx + row];
-        for (int col = 0; col < font.width; col++) {
-            time_buf_pixel(x + col, y + row, (line << col) & 0x8000 ? fg : bg);
-        }
-    }
-}
-
-static void time_buf_draw_string(int x, int y, const char* str, FontDef font, uint16_t fg, uint16_t bg)
-{
-    while (*str) {
-        time_buf_draw_char(x, y, *str, font, fg, bg);
-        x += font.width;
-        str++;
-    }
-}
-
-static void gui_flush_time(int screen_y, const char* str)
-{
-    time_buf_clear(ST7735_BLACK);
-    int len = 0;
-    while (str[len]) len++;
-    int x = (TIME_W - len * Font_16x26.width) / 2;
-    int y = (TIME_H - Font_16x26.height) / 2;
-    if (y < 0) y = 0;
-    time_buf_draw_string(x, y, str, Font_16x26, ST7735_WHITE, ST7735_BLACK);
-    ST7735_PushBuffer(LEFT_W, screen_y, TIME_W, TIME_H, time_backbuf);
-}
 
 extern "C" void gui_update_time(uint8_t hour, uint8_t minute, uint8_t second)
 {
     static uint8_t last_h = 0xFF, last_m = 0xFF, last_s = 0xFF;
     char buf[8];
 
+    /* 右栏 28px 宽，11x18 字体两个字符占 22px，居中偏移 +3 */
+    #define TIME_X  (LEFT_W + 3)
+
     if (hour != last_h) {
         snprintf(buf, sizeof(buf), "%02d", hour);
-        gui_flush_time(10, buf);
+        ST7735_WriteString(TIME_X, 8, buf, Font_11x18, ST7735_WHITE, ST7735_BLACK);
         last_h = hour;
     }
 
     if (minute != last_m) {
         snprintf(buf, sizeof(buf), "%02d", minute);
-        gui_flush_time(48, buf);
+        ST7735_WriteString(TIME_X, 36, buf, Font_11x18, ST7735_WHITE, ST7735_BLACK);
         last_m = minute;
     }
 
     if (second != last_s) {
         snprintf(buf, sizeof(buf), "%02d", second);
-        gui_flush_time(86, buf);
+        ST7735_WriteString(TIME_X, 64, buf, Font_11x18, ST7735_WHITE, ST7735_BLACK);
         last_s = second;
     }
 }
