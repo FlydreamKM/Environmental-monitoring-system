@@ -12,6 +12,8 @@
 #include "main.h"
 #include "sht40.h"
 
+extern I2C_HandleTypeDef hi2c2; /*!< I2C2 句柄，定义于 main.c */
+
 /* ===================== 阻塞式 API 实现 ===================== */
 
 void SHT40_Read_Temperature_Humidity(double *Temperature, double *Humidity)
